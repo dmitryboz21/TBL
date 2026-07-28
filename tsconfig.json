@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "rootDir": "./src/ts",
+    "outDir": "./public/js",
+    "target": "ES2021",
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "sourceMap": true,
+    "removeComments": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  },
+  "include": ["src/ts/**/*"]
+}

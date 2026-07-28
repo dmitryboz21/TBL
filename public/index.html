@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Парсер лог-ТЗ → Сводная таблица</title>
+  <link rel="stylesheet" href="http://localhost:3000/public/css/main.css">
+</head>
+<body>
+  <header id="toolbar">
+    <div class="toolbar-row">
+      <label for="file-input" class="file-label">📂 Загрузить .md файл</label>
+      <input type="file" id="file-input" accept=".md,.markdown">
+
+      <div class="search-group">
+        <input type="text" id="search-input" placeholder="🔍 Поиск по таблице..." disabled>
+      </div>
+
+      <div class="export-group">
+        <button id="btn-theme" class="btn-theme" title="Переключить тему">🌙 Тема</button>
+        <button id="btn-export-json" class="btn-export" disabled>Экспорт JSON</button>
+      </div>
+    </div>
+    <div id="status-bar" class="status-bar">Загрузите Markdown-файл ТЗ по логированию</div>
+  </header>
+
+  <main>
+    <div id="table-container"></div>
+    <div id="unknown-container"></div>
+    <div id="error-container"></div>
+  </main>
+
+  <script type="module" src="http://localhost:3000/public/js/app.js"></script>
+</body>
+</html>

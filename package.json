@@ -1,0 +1,27 @@
+{
+  "name": "TBL",
+  "version": "1.0.0",
+  "description": "Парсер лог-ТЗ → Сводная таблица (SPA)",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx serve public -l 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmtb21/TBL.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dmtb21/TBL/issues"
+  },
+  "homepage": "https://github.com/dmtb21/TBL#readme",
+  "devDependencies": {
+    "serve": "^14.2.6",
+    "typescript": "^7.0.2"
+  }
+}
