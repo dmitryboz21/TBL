@@ -1,4 +1,5 @@
-import type { CompiledResult, CompiledGroup, OutputRow } from './types.js'
+import type { CompiledResult, CompiledGroup, OutputRow, ColumnSettings } from './types.js'
+import { applySettings } from './ColumnSettings.js'
 
 /** Escape HTML special characters. */
 function escapeHtml(s: string): string {
@@ -26,8 +27,12 @@ export function render(
   compiled: CompiledResult,
   container: HTMLElement,
   unknownContainer: HTMLElement,
-  errorContainer: HTMLElement
+  errorContainer: HTMLElement,
+  settings?: ColumnSettings
 ): void {
+  if (settings) {
+    applySettings(compiled, settings)
+  }
   const { groups, unknownTables, errors } = compiled
 
   // Clear containers

@@ -172,6 +172,36 @@ const result7 = groupTables({ converted: [], errors: [] })
 assert(result7.groups.length === 0, `0 групп`)
 assert(result7.remainingUnknowns.length === 0, `0 unknown`)
 
+// ── Test 8: Last group without type-2 (multiple type-1s + trailing text) ──
+console.log('\n📦 Test: последняя группа без type-2')
+const parsed8 = {
+  converted: [
+    makeTable('type-1', ['Поле', 'Описание', 'Значение'], [
+      ['Название', 'Name', 'a1'],
+    ]),
+    makeTable('type-2', ['*', 'f'], [
+      ['', 'd'],
+      ['a1', 'О'],
+    ]),
+    makeTable('type-1', ['Поле', 'Описание', 'Значение'], [
+      ['Название', 'Name', 'a2'],
+    ]),
+    makeTable('type-1', ['Поле', 'Описание', 'Значение'], [
+      ['Название', 'Name', 'a3'],
+    ]),
+    makeText('trailing text'),
+  ],
+  errors: [],
+}
+const result8 = groupTables(parsed8)
+assert(result8.groups.length === 2, `2 группы (было ${result8.groups.length})`)
+assert(result8.groups[0].type2Item !== undefined, 'группа 0: type-2 присутствует')
+assert(result8.groups[0].type1Items.length === 1, 'группа 0: 1 type-1')
+assert(result8.groups[1].type2Item === undefined, 'группа 1: type-2 отсутствует')
+assert(result8.groups[1].type1Items.length === 2, `группа 1: 2 type-1 (было ${result8.groups[1].type1Items.length})`)
+assert(result8.groups[1].tables.length === 2, 'группа 1: 2 tables')
+assert(result8.groups[1].tables[1].items.length === 1, 'группа 1: trailing text assigned to last table')
+
 console.log(`\n${'='.repeat(50)}`)
 console.log(`Результат: ${passed} passed, ${failed} failed`)
 if (failures.length > 0) {

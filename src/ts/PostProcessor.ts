@@ -20,19 +20,17 @@ interface TableWithContent {
  *
  * Algorithm (per tz.md §3.3):
  * 1. Iterate through `parsed.converted[]` sequentially.
- * 2. type-1 → create new table entry in grp.tables, assign pendingItems to it.
- * 3. type-2 → close group: assign pendingItems to the last table, set type2Item.
- * 4. header/text → buffer into pendingItems; will be assigned when next type-1
- *    or group boundary is encountered.
- * 5. unknown → flush pending to last table, add to remainingUnknowns.
- * 6. End of file → flush pending to last table.
+ * 2. type-1 → push onto stack; if stack was empty, assign new groupIndex.
+ * 3. type-2 → assign current groupIndex to all type-1s on stack, clear stack.
+ * 4. unknown → collect, clear stack (and current group).
+ * 5. header/text → buffer into pendingItems.
+ * 6. End of file → flush remaining stack into a new group (no type-2).
  */
 export function groupTables(parsed: ParsedResult): GroupedResult {
   const groups: TableGroup[] = []
   const remainingUnknowns: UnknownTable[] = []
   const errors: string[] = [...parsed.errors]
 
-  const pendingStack: TableNode[] = []
   const pendingItems: (HeaderNode | TextNode)[] = []
   const bufferedHeaders: HeaderNode[] = []
   const bufferedTexts: TextNode[] = []
@@ -42,10 +40,10 @@ export function groupTables(parsed: ParsedResult): GroupedResult {
 
   const getGroup = (): TableGroup | null => currentGroup
 
-  const createGroup = () => {
+  const createGroup = (): TableGroup => {
     const grp: TableGroup = {
       groupIndex,
-      type1Items: pendingStack.slice(),
+      type1Items: [],
       headers: [...bufferedHeaders],
       texts: [...bufferedTexts],
       tables: [],
@@ -55,6 +53,7 @@ export function groupTables(parsed: ParsedResult): GroupedResult {
     groups.push(grp)
     groupIndex++
     currentGroup = grp
+    return grp
   }
 
   for (const item of parsed.converted) {
@@ -62,39 +61,32 @@ export function groupTables(parsed: ParsedResult): GroupedResult {
       case 'table': {
         switch (item.tableType) {
           case 'type-1': {
-            // Current group is already closed by a type-2 → start new group
-            if (currentGroup && (currentGroup as TableGroup).type2Item) {
-              currentGroup = null
+            const grp = getGroup()
+            if (grp && grp.type2Item) {
+              // Current group already has type-2 → start a new group
+              const newGrp = createGroup()
+              newGrp.tables.push({ table: item, items: [...pendingItems] })
+              newGrp.type1Items.push(item)
+            } else {
+              // No group yet, or group without type-2 → extend current
+              const currentGrp = grp ?? createGroup()
+              currentGrp.tables.push({ table: item, items: [...pendingItems] })
+              currentGrp.type1Items.push(item)
             }
-            if (!currentGroup) {
-              createGroup()
-            }
-            const grp = getGroup()!
-            // Assign buffered items to THIS new table (items that appeared
-            // after the previous table but before this one belong to this one)
-            grp.tables.push({ table: item, items: [...pendingItems] })
             pendingItems.length = 0
-            pendingStack.push(item)
             break
           }
 
           case 'type-2': {
             const grp = getGroup()
-            if (grp) {
+            if (grp && grp.tables.length > 0) {
               // Assign pending items to the last table before type-2
-              if (grp.tables.length > 0) {
-                const last = grp.tables[grp.tables.length - 1]
-                if (last) {
-                  last.items.push(...pendingItems)
-                }
-              }
-              // Add remaining pending tables
-              for (const table of pendingStack) {
-                grp.type1Items.push(table)
+              const last = grp.tables[grp.tables.length - 1]
+              if (last) {
+                last.items.push(...pendingItems)
               }
               grp.type2Item = item
             }
-            pendingStack.length = 0
             pendingItems.length = 0
             break
           }
@@ -108,7 +100,6 @@ export function groupTables(parsed: ParsedResult): GroupedResult {
                 last.items.push(...pendingItems)
               }
             }
-            pendingStack.length = 0
             pendingItems.length = 0
             currentGroup = null
             break
@@ -141,14 +132,13 @@ export function groupTables(parsed: ParsedResult): GroupedResult {
     }
   }
 
-  // Flush remaining pending items at end of file
+  // Flush remaining pending items to the last table at end of file
   const finalGrp = getGroup()
   if (finalGrp && finalGrp.tables.length > 0 && pendingItems.length > 0) {
     const last = finalGrp.tables[finalGrp.tables.length - 1]
     if (last) {
       last.items.push(...pendingItems)
     }
-    pendingItems.length = 0
   }
 
   return { groups, remainingUnknowns, errors }

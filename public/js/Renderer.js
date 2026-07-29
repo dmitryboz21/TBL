@@ -1,3 +1,4 @@
+import { applySettings } from './ColumnSettings.js';
 function escapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -8,7 +9,10 @@ export function highlightO_NO(value) {
         return `<span class="badge badge-no">НО</span>`;
     return escapeHtml(value);
 }
-export function render(compiled, container, unknownContainer, errorContainer) {
+export function render(compiled, container, unknownContainer, errorContainer, settings) {
+    if (settings) {
+        applySettings(compiled, settings);
+    }
     const { groups, unknownTables, errors } = compiled;
     container.innerHTML = '';
     unknownContainer.innerHTML = '';

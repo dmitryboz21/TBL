@@ -19,6 +19,28 @@
       <div class="export-group">
         <button id="btn-theme" class="btn-theme" title="Переключить тему">🌙 Тема</button>
         <button id="btn-export-json" class="btn-export" disabled>Экспорт JSON</button>
+        <div class="column-settings-group">
+          <button id="btn-column-settings" class="btn-export" disabled title="Настройки столбцов">
+            ⚙️ Столбцы
+            <span id="col-hidden-badge" class="col-badge hidden-badge hidden"></span>
+            <span id="col-renamed-badge" class="col-badge renamed-badge hidden"></span>
+          </button>
+          <div id="column-settings-dropdown" class="column-settings-dropdown hidden">
+            <div id="column-settings-list" class="column-settings-list"></div>
+            <div class="column-settings-footer">
+              <div class="load-settings-row">
+                <select id="select-saved-files" class="saved-files-select">
+                  <option value="">— сохранённые настройки —</option>
+                </select>
+                <button id="btn-load-settings" class="btn-export" disabled>Загрузить</button>
+              </div>
+              <div class="footer-divider"></div>
+              <button id="btn-save-settings" class="btn-primary">Сохранить</button>
+              <button id="btn-reset-hidden" class="btn-export">Сбросить скрытия</button>
+              <button id="btn-reset-renamed" class="btn-export">Сбросить переименования</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div id="status-bar" class="status-bar">Загрузите Markdown-файл ТЗ по логированию</div>

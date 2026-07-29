@@ -2,15 +2,30 @@ import { parse } from './Parser.js';
 import { groupTables } from './PostProcessor.js';
 import { compile } from './Compiler.js';
 import { render } from './Renderer.js';
+import { loadSettings, saveSettings, collectAllColumnKeys, copySettingsFrom, } from './ColumnSettings.js';
 let compiledResult = null;
+let currentFileName = '';
+let currentSettings = { hidden: [], renamed: {} };
+let allColumnKeys = [];
+let allColumnLabels = {};
 const fileInput = document.getElementById('file-input');
 const searchInput = document.getElementById('search-input');
 const btnJson = document.getElementById('btn-export-json');
 const btnTheme = document.getElementById('btn-theme');
+const btnColSettings = document.getElementById('btn-column-settings');
 const statusBar = document.getElementById('status-bar');
 const tableContainer = document.getElementById('table-container');
 const unknownContainer = document.getElementById('unknown-container');
 const errorContainer = document.getElementById('error-container');
+const dropdown = document.getElementById('column-settings-dropdown');
+const colList = document.getElementById('column-settings-list');
+const hiddenBadge = document.getElementById('col-hidden-badge');
+const renamedBadge = document.getElementById('col-renamed-badge');
+const btnSave = document.getElementById('btn-save-settings');
+const btnResetHidden = document.getElementById('btn-reset-hidden');
+const btnResetRename = document.getElementById('btn-reset-renamed');
+const selectSavedFiles = document.getElementById('select-saved-files');
+const btnLoadSettings = document.getElementById('btn-load-settings');
 const THEME_STORAGE_KEY = 'tbl-theme';
 function getSavedTheme() {
     return localStorage.getItem(THEME_STORAGE_KEY) || 'dark';
@@ -44,12 +59,219 @@ function syncScrollAreas() {
         });
     }
 }
+function restoreOriginalLabels(compiled) {
+    for (const group of compiled.groups) {
+        for (const col of group.columns) {
+            const orig = allColumnLabels[col.key];
+            if (orig)
+                col.label = orig;
+        }
+        if (group.type2Columns) {
+            for (const col of group.type2Columns) {
+                const orig = allColumnLabels[col.key];
+                if (orig)
+                    col.label = orig;
+            }
+        }
+    }
+}
+function updateBadges() {
+    if (!hiddenBadge || !renamedBadge)
+        return;
+    const hiddenCount = currentSettings.hidden.length;
+    const renamedCount = Object.keys(currentSettings.renamed).length;
+    if (hiddenCount > 0) {
+        hiddenBadge.textContent = `С${hiddenCount}`;
+        hiddenBadge.classList.remove('hidden');
+    }
+    else {
+        hiddenBadge.classList.add('hidden');
+    }
+    if (renamedCount > 0) {
+        renamedBadge.textContent = `П${renamedCount}`;
+        renamedBadge.classList.remove('hidden');
+    }
+    else {
+        renamedBadge.classList.add('hidden');
+    }
+}
+function openColumnSettings() {
+    if (!dropdown)
+        return;
+    dropdown.classList.remove('hidden');
+    renderColumnList();
+    refreshSavedFilesSelect();
+}
+function closeColumnSettings() {
+    if (!dropdown)
+        return;
+    dropdown.classList.add('hidden');
+}
+function renderColumnList() {
+    if (!colList)
+        return;
+    colList.innerHTML = '';
+    for (const key of allColumnKeys) {
+        const originalLabel = allColumnLabels[key] ?? key;
+        const item = document.createElement('div');
+        item.className = 'column-settings-item';
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'col-name';
+        nameSpan.title = originalLabel;
+        nameSpan.textContent = originalLabel;
+        nameSpan.style.color = currentSettings.hidden.includes(key)
+            ? 'var(--text-muted)'
+            : 'var(--text-primary)';
+        if (currentSettings.renamed[key]) {
+            nameSpan.textContent = `${originalLabel} → ${currentSettings.renamed[key]}`;
+        }
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.title = 'Скрыть столбец во всех группах';
+        checkbox.dataset.key = key;
+        checkbox.checked = currentSettings.hidden.includes(key);
+        const renameInput = document.createElement('input');
+        renameInput.type = 'text';
+        renameInput.className = 'col-rename-input';
+        renameInput.placeholder = 'Переименовать…';
+        renameInput.title = 'Новое имя столбца при выводе и экспорте';
+        renameInput.dataset.key = key;
+        renameInput.value = currentSettings.renamed[key] ?? '';
+        item.appendChild(nameSpan);
+        item.appendChild(checkbox);
+        item.appendChild(renameInput);
+        colList.appendChild(item);
+    }
+}
+function applyFromList() {
+    if (!colList || !compiledResult)
+        return;
+    const items = colList.querySelectorAll('.column-settings-item');
+    const hidden = [];
+    const renamed = {};
+    for (const item of items) {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const renameInput = item.querySelector('input.col-rename-input');
+        const key = checkbox?.dataset.key;
+        if (!key)
+            continue;
+        if (checkbox?.checked) {
+            hidden.push(key);
+        }
+        const newLabel = renameInput?.value.trim();
+        if (newLabel) {
+            renamed[key] = newLabel;
+        }
+    }
+    currentSettings = { hidden, renamed };
+    updateBadges();
+}
+btnSave?.addEventListener('click', () => {
+    if (!compiledResult || !currentFileName)
+        return;
+    applyFromList();
+    saveSettings(currentFileName, currentSettings);
+    restoreOriginalLabels(compiledResult);
+    render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings);
+    syncScrollAreas();
+    closeColumnSettings();
+});
+btnResetHidden?.addEventListener('click', () => {
+    currentSettings.hidden = [];
+    if (colList) {
+        for (const item of colList.querySelectorAll('input[type="checkbox"]')) {
+            item.checked = false;
+        }
+    }
+    updateBadges();
+});
+btnResetRename?.addEventListener('click', () => {
+    currentSettings.renamed = {};
+    if (colList) {
+        for (const item of colList.querySelectorAll('input.col-rename-input')) {
+            item.value = '';
+        }
+    }
+    updateBadges();
+});
+function collectSavedFileNames(exclude) {
+    const seen = new Set();
+    const result = [];
+    const hiddenSuffix = '__hidden_columns';
+    const renamedSuffix = '__renamed_columns';
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key)
+            continue;
+        const idxH = key.indexOf(hiddenSuffix);
+        const idxR = key.indexOf(renamedSuffix);
+        if (idxH >= 0 || idxR >= 0) {
+            const basename = idxH >= 0 ? key.substring(0, idxH) : key.substring(0, idxR);
+            if (basename === exclude)
+                continue;
+            if (!seen.has(basename)) {
+                seen.add(basename);
+                result.push(basename);
+            }
+        }
+    }
+    return result.sort();
+}
+function refreshSavedFilesSelect() {
+    if (!selectSavedFiles)
+        return;
+    const currentVal = selectSavedFiles.value;
+    selectSavedFiles.innerHTML = '<option value="">— сохранённые настройки —</option>';
+    for (const name of collectSavedFileNames(currentFileName)) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        selectSavedFiles.appendChild(opt);
+    }
+    if (currentVal && [...selectSavedFiles.options].some(o => o.value === currentVal)) {
+        selectSavedFiles.value = currentVal;
+    }
+    if (btnLoadSettings)
+        btnLoadSettings.disabled = !selectSavedFiles.value;
+}
+btnLoadSettings?.addEventListener('click', () => {
+    const sourceBasename = selectSavedFiles?.value;
+    if (!sourceBasename || !compiledResult)
+        return;
+    const copied = copySettingsFrom(sourceBasename, compiledResult, currentSettings, allColumnKeys);
+    currentSettings = copied;
+    updateBadges();
+    saveSettings(currentFileName, currentSettings);
+    restoreOriginalLabels(compiledResult);
+    render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings);
+    syncScrollAreas();
+    closeColumnSettings();
+});
+selectSavedFiles?.addEventListener('change', () => {
+    if (btnLoadSettings)
+        btnLoadSettings.disabled = !selectSavedFiles.value;
+});
+btnColSettings?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (dropdown?.classList.contains('hidden')) {
+        openColumnSettings();
+    }
+    else {
+        closeColumnSettings();
+    }
+});
+document.addEventListener('click', (ev) => {
+    if (dropdown && !dropdown.contains(ev.target) && !btnColSettings?.contains(ev.target)) {
+        closeColumnSettings();
+    }
+});
 fileInput.addEventListener('change', async (ev) => {
     const target = ev.target;
     const file = target?.files?.[0];
     if (!file)
         return;
     statusBar.textContent = `Загрузка: ${file.name}…`;
+    currentFileName = file.name.replace(/\.(md|markdown)$/i, '');
     try {
         const text = await file.text();
         statusBar.textContent = `Парсинг: ${file.name}…`;
@@ -58,10 +280,33 @@ fileInput.addEventListener('change', async (ev) => {
         const grouped = groupTables(parsed);
         statusBar.textContent = `Компиляция: ${file.name}…`;
         compiledResult = compile(grouped);
-        render(compiledResult, tableContainer, unknownContainer, errorContainer);
+        allColumnKeys = [];
+        allColumnLabels = {};
+        if (compiledResult) {
+            for (const group of compiledResult.groups) {
+                for (const col of group.columns) {
+                    if (!allColumnLabels[col.key]) {
+                        allColumnKeys.push(col.key);
+                        allColumnLabels[col.key] = col.label;
+                    }
+                }
+                if (group.type2Columns) {
+                    for (const col of group.type2Columns) {
+                        if (!allColumnLabels[col.key]) {
+                            allColumnKeys.push(col.key);
+                            allColumnLabels[col.key] = col.label;
+                        }
+                    }
+                }
+            }
+        }
+        currentSettings = loadSettings(currentFileName);
+        restoreOriginalLabels(compiledResult);
+        render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings);
         syncScrollAreas();
         buildSearchIndex();
         enableControls();
+        updateBadges();
         const totalRows = compiledResult.groups.reduce((sum, g) => sum + g.type1Rows.length + g.type2Rows.length, 0);
         statusBar.textContent = `Готово: ${compiledResult.groups.length} групп, ${totalRows} строк, ${compiledResult.errors.length} ошибок`;
     }
@@ -139,6 +384,7 @@ function enableControls() {
     searchInput.disabled = false;
     btnJson.disabled = false;
     btnTheme.disabled = false;
+    btnColSettings.disabled = false;
 }
 function buildSearchIndex() {
 }

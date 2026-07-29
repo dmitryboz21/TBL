@@ -2,7 +2,6 @@ export function groupTables(parsed) {
     const groups = [];
     const remainingUnknowns = [];
     const errors = [...parsed.errors];
-    const pendingStack = [];
     const pendingItems = [];
     const bufferedHeaders = [];
     const bufferedTexts = [];
@@ -12,7 +11,7 @@ export function groupTables(parsed) {
     const createGroup = () => {
         const grp = {
             groupIndex,
-            type1Items: pendingStack.slice(),
+            type1Items: [],
             headers: [...bufferedHeaders],
             texts: [...bufferedTexts],
             tables: [],
@@ -22,39 +21,36 @@ export function groupTables(parsed) {
         groups.push(grp);
         groupIndex++;
         currentGroup = grp;
+        return grp;
     };
     for (const item of parsed.converted) {
         switch (item.type) {
             case 'table': {
                 switch (item.tableType) {
                     case 'type-1': {
-                        if (currentGroup && currentGroup.type2Item) {
-                            currentGroup = null;
-                        }
-                        if (!currentGroup) {
-                            createGroup();
-                        }
                         const grp = getGroup();
-                        grp.tables.push({ table: item, items: [...pendingItems] });
+                        if (grp && grp.type2Item) {
+                            const newGrp = createGroup();
+                            newGrp.tables.push({ table: item, items: [...pendingItems] });
+                            newGrp.type1Items.push(item);
+                        }
+                        else {
+                            const currentGrp = grp ?? createGroup();
+                            currentGrp.tables.push({ table: item, items: [...pendingItems] });
+                            currentGrp.type1Items.push(item);
+                        }
                         pendingItems.length = 0;
-                        pendingStack.push(item);
                         break;
                     }
                     case 'type-2': {
                         const grp = getGroup();
-                        if (grp) {
-                            if (grp.tables.length > 0) {
-                                const last = grp.tables[grp.tables.length - 1];
-                                if (last) {
-                                    last.items.push(...pendingItems);
-                                }
-                            }
-                            for (const table of pendingStack) {
-                                grp.type1Items.push(table);
+                        if (grp && grp.tables.length > 0) {
+                            const last = grp.tables[grp.tables.length - 1];
+                            if (last) {
+                                last.items.push(...pendingItems);
                             }
                             grp.type2Item = item;
                         }
-                        pendingStack.length = 0;
                         pendingItems.length = 0;
                         break;
                     }
@@ -67,7 +63,6 @@ export function groupTables(parsed) {
                                 last.items.push(...pendingItems);
                             }
                         }
-                        pendingStack.length = 0;
                         pendingItems.length = 0;
                         currentGroup = null;
                         break;
@@ -105,7 +100,6 @@ export function groupTables(parsed) {
         if (last) {
             last.items.push(...pendingItems);
         }
-        pendingItems.length = 0;
     }
     return { groups, remainingUnknowns, errors };
 }

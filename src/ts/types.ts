@@ -112,6 +112,11 @@ export interface UnknownTable {
 
 export type HighlightType = 'ok' | 'no' | 'text'
 
+export interface ColumnSettings {
+  hidden: string[]       // column keys hidden across all groups
+  renamed: Record<string, string>  // column key → custom label
+}
+
 export interface RenderContext {
   compiled: CompiledResult
   container: HTMLElement

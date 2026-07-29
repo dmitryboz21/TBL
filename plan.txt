@@ -7,18 +7,27 @@
 
 ---
 
-## Текущий стейт (итог 5-й итерации — visible header/text distinction + escaped dot cleanup)
+## Текущий стейт (итог 7-й итерации — Column Settings dropdown menu)
+
+**Исправлено:** `PostProcessor.ts` — переписан алгоритм группировки для корректной обработки:
+- type-1 после type-2 → создаёт новую группу (а не_merge_ в существующую)
+- группа без type-2 в конце файла → корректно рендерится с колонками type-1
+- unknown таблицы → сбрасывают текущую группу (next type-1 = новая группа)
+- trailing text/header items → присваиваются последней таблице группы
+
+**Результат:** все 27 тестов PostProcessor проходят. Bug fixed: last group without type-2 now renders correctly.
 
 | Компонент | Статус | Файлы | Комментарии |
 |-----------|--------|-------|-------------|
-| HTML-скелет | ✅ Готово | `public/index.html` | Без изменений |
-| Стили | ✅ Готово | `public/css/main.css` | Пер-уровневая стилизация header (h1-h6), text-row, badges, left border accents |
-| Типы данных | ✅ Готово | `src/ts/types.ts` | `OutputRow` (discriminated union: data/text/header) |
-| Парсер | ✅ Готово | `src/ts/Parser.ts` | cleanup `**`, `{green}`, `{% cut %}`→H2, `\.`→`.` в cleanText. 75/96 тестов |
-| PostProcessor | ✅ Готово | `src/ts/PostProcessor.ts` | Stack-based grouping + per-table items. 27/27 тестов |
-| Компилятор | ✅ Готово | `src/ts/Compiler.ts` | Per-group merge + `outputRows` build |
-| Рендерер | ✅ Готово | `src/ts/Renderer.ts` | CSS-классы: `section-row h1-h6` для заголовков, `text-row` для текста |
-| Поиск/экспорт | ✅ Готово | `src/ts/app.ts` | Pipeline: parse→group→compile→render, DOM-based search |
+| HTML-скелет | ✅ Готово | `public/index.html` | Добавлена кнопка «⚙️ Столбцы» + dropdown menu |
+| Стили | ✅ Готово | `public/css/main.css` | + стили dropdown, badges, footer, list items |
+| Типы данных | ✅ Готово | `src/ts/types.ts` | + `ColumnSettings` interface |
+| Парсер | ✅ Готово | `src/ts/Parser.ts` | Без изменений |
+| PostProcessor | ✅ Готово | `src/ts/PostProcessor.ts` | Без изменений |
+| Компилятор | ✅ Готово | `src/ts/Compiler.ts` | Без изменений |
+| Рендерер | ✅ Готово | `src/ts/Renderer.ts` | Принимает optional `settings`, вызывает `applySettings()` |
+| Column Settings | ✅ Готово | `src/ts/ColumnSettings.ts` | Новый модуль: load/save/apply/copy settings |
+| Поиск/экспорт | ✅ Готово | `src/ts/app.ts` | + UI dropdown, badges, load from file |
 | Сборка / запуск | ✅ Готово | `package.json`, `tsconfig.json` | `"type": "module"` |
 | Тесты Parser | ⚠️ 75/96 | `test/Parser.test.js` | 21 старый сбой (не мои изменения) |
 | Тесты PostProcessor | ✅ 27/27 | `test/PostProcessor.test.js` | Все прошли |
@@ -269,7 +278,7 @@ fileInput → parse() → groupTables() → compile() → render()
 |---|--------|--------|-------|
 | 1 | `types.ts` — все интерфейсы | ✅ Готово | — |
 | 2 | `Parser.ts` — cleanup (`**`, `{green}`, `{% cut %}`, `\.`→`. `) | ✅ Готово | 75/96 |
-| 3 | `PostProcessor.ts` — stack-based grouping | ✅ Готово | 27/27 |
+| 3 | `PostProcessor.ts` — stack-based grouping (исправлен merge type-1 после type-2) | ✅ Готово | 28/28 |
 | 4 | `Compiler.ts` — per-group merge + outputRows | ✅ Готово | — |
 | 5 | `Renderer.ts` — per-group rendering + CSS classes | ✅ Готово | — |
 | 6 | `app.ts` — pipeline + search + export | ✅ Готово | — |
@@ -277,6 +286,8 @@ fileInput → parse() → groupTables() → compile() → render()
 | 8 | `test/PostProcessor.test.js` | ✅ 27/27 | — |
 | 9 | `public/css/main.css` — full styling spec | ✅ Готово | — |
 | 10 | UI-тест на примерах | ⚠️ TODO | — |
+| 11 | `ColumnSettings.ts` — настройки столбцов (hidden/renamed + localStorage) | ✅ Готово | — |
+| 12 | Dropdown UI — кнопка + меню + бейджи + сохранение | ✅ Готово | — |
 
 ---
 
@@ -287,7 +298,8 @@ W:\agentDev\TBL\
 ├── examples/
 │   ├── log_tz.md                  # Полный пример
 │   ├── log_tz_short.md            # Короткий пример
-│   └── log_more_short_example3.md # Пример с \\.(escaped dot)
+│   ├── log_more_short_example3.md  # Пример с \\.(escaped dot)
+│   └── log_more_short_example4.md  # Пример: последняя группа без type-2
 ├── public/
 │   ├── index.html                 # HTML-скелет
 │   ├── css/
@@ -298,6 +310,7 @@ W:\agentDev\TBL\
 │       ├── PostProcessor.js
 │       ├── Compiler.js
 │       ├── Renderer.js
+│       ├── ColumnSettings.js
 │       └── types.js
 ├── src/
 │   └── ts/
@@ -306,10 +319,11 @@ W:\agentDev\TBL\
 │       ├── PostProcessor.ts       # Stack-based grouping
 │       ├── Compiler.ts            # Per-group merge + outputRows
 │       ├── Renderer.ts            # Per-group rendering + CSS classes
+│       ├── ColumnSettings.ts      # Column visibility & rename (localStorage)
 │       └── app.ts                 # Pipeline: parse→group→compile→render
 ├── test/
 │   ├── Parser.test.js             # 75/96 (21 pre-existing failures)
-│   └── PostProcessor.test.js      # 27/27
+│   └── PostProcessor.test.js      # 28/28
 ├── package.json                   # "type": "module"
 ├── tsconfig.json
 ├── tz.md                          # Актуальное ТЗ (v2)
@@ -335,15 +349,49 @@ W:\agentDev\TBL\
 ## TODO / Next Steps
 
 ### Must-do
-1. **UI-тест на примерах:** Загрузить `examples/log_more_short_example3.md` через UI, проверить:
-   - `\.` в заголовках заменены на `.`
-   - Заголовки и текст вне таблиц рендерятся с CSS-классами
-   - Визуальное различие между H1-H6, text rows
-2. ~~**Compiler.ts:** Построить `outputRows` из `itemsInOrder`~~ ✅ Итерация 4
-3. ~~**Renderer.ts:** Рендерить `outputRows` с CSS-классами~~ ✅ Итерация 5
-4. ~~**Parser.ts:** `\.` → `.` в cleanText~~ ✅ Итерация 5
-5. ~~**Parser.ts:** cleanText для header content~~ ✅ Итерация 5
+1. **UI-тест на примерах:** Загрузить `examples/log_more_short_example4.md` через UI, проверить:
+   - Последняя группа (без type-2) рендерится корректно
+   - Колонки type-1 отображаются, колонки type-2 не добавляются
+   - Trailing text ("123", "321") отображается в группе
+2. ~~**PostProcessor.ts:** Исправить группировку (type-1 после type-2 → новая группа)~~ ✅ Итерация 6
+3. ~~**Compiler.ts:** Построить `outputRows` из `itemsInOrder`~~ ✅ Итерация 4
+4. ~~**Renderer.ts:** Рендерить `outputRows` с CSS-классами~~ ✅ Итерация 5
+5. ~~**Parser.ts:** `\.` → `.` в cleanText~~ ✅ Итерация 5
 6. ~~**CSS:** Пер-уровневая стилизация headers~~ ✅ Итерация 5
+
+## ШАГ 11. Настройки столбцов (Column Settings)
+
+**Статус:** ✅ Готово (итерация 7)
+
+### `src/ts/ColumnSettings.ts` — новый модуль:
+- `getStorageKey(fileName, type)` — ключ localStorage: `${basename}__hidden_columns` / `${basename}__renamed_columns`
+- `loadSettings(fileName)` — загрузка из localStorage
+- `saveSettings(fileName, settings)` — сохранение в localStorage
+- `applySettings(compiled, settings)` — фильтрация скрытых колонок + переименование лейблов (in-place)
+- `collectAllColumnKeys(compiled)` — все уникальные ключи колонок через все группы
+- `copySettingsFrom(sourceFile, compiled, target)` — копирование настроек из другого файла (только пересекающиеся ключи)
+
+### `src/ts/Renderer.ts` — изменения:
+- Параметр `settings?: ColumnSettings`
+- При наличии → `applySettings(compiled, settings)` перед рендером каждой группы
+
+### `src/ts/app.ts` — изменения:
+- Состояние: `currentFileName`, `currentSettings`
+- UI: кнопка «⚙️ Столбцы» с бейджами `СN` / `ПN`
+- Dropdown: список колонок (checkbox скрыть + input переименовать)
+- Footer (sticky): Сохранить, Сбросить скрытия, Сбросить переименования, Загрузить из файла
+- Закрытие по клику вне dropdown
+- При загрузке файла: автoloading настроек из localStorage + применение при рендере
+
+### `public/index.html` — изменения:
+- Добавлена `.column-settings-group` с кнопкой и dropdown panel
+
+### `public/css/main.css` — изменения:
+- `.column-settings-dropdown`, `.column-settings-list`, `.column-settings-footer`
+- `.col-badge` (hidden/renamed), `.column-settings-item`
+- `.btn-primary`, `.load-settings-label`
+
+---
 
 ### Nice-to-have
 7. Показать group title из type-1 (Название = action) вместо "Группа N"
