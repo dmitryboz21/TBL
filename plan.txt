@@ -7,30 +7,42 @@
 
 ---
 
-## Текущий стейт (итог 7-й итерации — Column Settings dropdown menu)
+## Текущий стейт (итог 8-й итерации — Column Settings bug fix)
 
-**Исправлено:** `PostProcessor.ts` — переписан алгоритм группировки для корректной обработки:
+**Исправлено (итерация 7):** `PostProcessor.ts` — переписан алгоритм группировки для корректной обработки:
 - type-1 после type-2 → создаёт новую группу (а не_merge_ в существующую)
 - группа без type-2 в конце файла → корректно рендерится с колонками type-1
 - unknown таблицы → сбрасывают текущую группу (next type-1 = новая группа)
 - trailing text/header items → присваиваются последней таблице группы
 
-**Результат:** все 27 тестов PostProcessor проходят. Bug fixed: last group without type-2 now renders correctly.
+**Исправлено (итерация 8):** `app.ts` — баг: восстановление скрытых и переименованных столбцов после нажатия «Сохранить».
+
+**Причина бага (двойная):**
+1. `allColumnKeys` захватывался из `compiledResult.groups` *после* того, как `applySettings()` внутри `render()` фильтрует скрытые колонки из `group.columns`. Скрытые колонки исчезали из `allColumnKeys`, поэтому при открытии dropdown они не рендерились.
+2. **Глубже:** `applySettings()` модифицирует `group.columns` **in-place**, отфильтровывая скрытые колонки. После первого применения settings колонка физически удаляется из `group.columns`. При следующем нажатии «Сохранить» `applySettings()` снова фильтрует — но колонки уже нет в массиве, и она не восстанавливается.
+
+**Решение:**
+- Добавлена `allOriginalColumnKeys` — ключи всех колонок до применения settings, используется в `renderColumnList()` и `applyFromList()`.
+- Добавлена `allOriginalGroupColumns` — полные определения колонок (`ColumnDef[]`) по группам, сохраняются до применения settings.
+- Добавлена функция `restoreOriginalColumns()` — восстанавливает `group.columns` и `group.type2Columns` из оригиналов перед каждым `applySettings()`.
+- `restoreOriginalColumns()` вызывается перед `render()` во всех точках: загрузка файла, кнопка «Сохранить», кнопка «Загрузить из файла».
+
+**Результат:** все 34 теста PostProcessor проходят. Баг исправлен.
 
 | Компонент | Статус | Файлы | Комментарии |
 |-----------|--------|-------|-------------|
-| HTML-скелет | ✅ Готово | `public/index.html` | Добавлена кнопка «⚙️ Столбцы» + dropdown menu |
-| Стили | ✅ Готово | `public/css/main.css` | + стили dropdown, badges, footer, list items |
-| Типы данных | ✅ Готово | `src/ts/types.ts` | + `ColumnSettings` interface |
+| HTML-скелет | ✅ Готово | `public/index.html` | Кнопка «⚙️ Столбцы» + dropdown menu |
+| Стили | ✅ Готово | `public/css/main.css` | Стили dropdown, badges, footer, list items |
+| Типы данных | ✅ Готово | `src/ts/types.ts` | `ColumnSettings` interface |
 | Парсер | ✅ Готово | `src/ts/Parser.ts` | Без изменений |
 | PostProcessor | ✅ Готово | `src/ts/PostProcessor.ts` | Без изменений |
 | Компилятор | ✅ Готово | `src/ts/Compiler.ts` | Без изменений |
 | Рендерер | ✅ Готово | `src/ts/Renderer.ts` | Принимает optional `settings`, вызывает `applySettings()` |
-| Column Settings | ✅ Готово | `src/ts/ColumnSettings.ts` | Новый модуль: load/save/apply/copy settings |
-| Поиск/экспорт | ✅ Готово | `src/ts/app.ts` | + UI dropdown, badges, load from file |
+| Column Settings | ✅ Готово | `src/ts/ColumnSettings.ts` | load/save/apply/copy settings |
+| Поиск/экспорт | ✅ Готово | `src/ts/app.ts` | UI dropdown, badges, load from file, баг-фикс итерации 8 |
 | Сборка / запуск | ✅ Готово | `package.json`, `tsconfig.json` | `"type": "module"` |
 | Тесты Parser | ⚠️ 75/96 | `test/Parser.test.js` | 21 старый сбой (не мои изменения) |
-| Тесты PostProcessor | ✅ 27/27 | `test/PostProcessor.test.js` | Все прошли |
+| Тесты PostProcessor | ✅ 34/34 | `test/PostProcessor.test.js` | Все прошли |
 
 ---
 
@@ -70,7 +82,7 @@
 Все: `font-weight: 600`, `color: #0d6efd`, `padding: 4px 10px`, **без padding-left**
 
 **Текстовые строки — `text-row` класс:**
-- Фон: #fffbe6, цвет: #664d03, font-style: italic
+- Фон: #fffbe6, цвет: #664d03
 - Левый бордюр: 3px solid #e6a817
 - font-size: 12px, font-weight: 400, padding: 4px 10px
 
@@ -278,16 +290,17 @@ fileInput → parse() → groupTables() → compile() → render()
 |---|--------|--------|-------|
 | 1 | `types.ts` — все интерфейсы | ✅ Готово | — |
 | 2 | `Parser.ts` — cleanup (`**`, `{green}`, `{% cut %}`, `\.`→`. `) | ✅ Готово | 75/96 |
-| 3 | `PostProcessor.ts` — stack-based grouping (исправлен merge type-1 после type-2) | ✅ Готово | 28/28 |
+| 3 | `PostProcessor.ts` — stack-based grouping (исправлен merge type-1 после type-2) | ✅ Готово | 34/34 |
 | 4 | `Compiler.ts` — per-group merge + outputRows | ✅ Готово | — |
 | 5 | `Renderer.ts` — per-group rendering + CSS classes | ✅ Готово | — |
 | 6 | `app.ts` — pipeline + search + export | ✅ Готово | — |
 | 7 | `test/Parser.test.js` | ⚠️ 75/96 | 21 pre-existing |
-| 8 | `test/PostProcessor.test.js` | ✅ 27/27 | — |
+| 8 | `test/PostProcessor.test.js` | ✅ 34/34 | — |
 | 9 | `public/css/main.css` — full styling spec | ✅ Готово | — |
 | 10 | UI-тест на примерах | ⚠️ TODO | — |
 | 11 | `ColumnSettings.ts` — настройки столбцов (hidden/renamed + localStorage) | ✅ Готово | — |
 | 12 | Dropdown UI — кнопка + меню + бейджи + сохранение | ✅ Готово | — |
+| 13 | Bug fix: restoration of hidden/renamed columns after Save | ✅ Готово (итерация 8) | Двойной фикс: `allOriginalColumnKeys` + `restoreOriginalColumns()` |
 
 ---
 
@@ -358,10 +371,11 @@ W:\agentDev\TBL\
 4. ~~**Renderer.ts:** Рендерить `outputRows` с CSS-классами~~ ✅ Итерация 5
 5. ~~**Parser.ts:** `\.` → `.` в cleanText~~ ✅ Итерация 5
 6. ~~**CSS:** Пер-уровневая стилизация headers~~ ✅ Итерация 5
+7. ~~**app.ts:** Исправить баг восстановления скрытых/переименованных столбцов после Save~~ ✅ Итерация 8
 
 ## ШАГ 11. Настройки столбцов (Column Settings)
 
-**Статус:** ✅ Готово (итерация 7)
+**Статус:** ✅ Готово (итерация 8 — bug fix applied)
 
 ### `src/ts/ColumnSettings.ts` — новый модуль:
 - `getStorageKey(fileName, type)` — ключ localStorage: `${basename}__hidden_columns` / `${basename}__renamed_columns`
@@ -375,8 +389,7 @@ W:\agentDev\TBL\
 - Параметр `settings?: ColumnSettings`
 - При наличии → `applySettings(compiled, settings)` перед рендером каждой группы
 
-### `src/ts/app.ts` — изменения:
-- Состояние: `currentFileName`, `currentSettings`
+###- **Итерация 8:** добавлены `allOriginalColumnKeys` + `allOriginalGroupColumns` — захватываются *до* применения settings. `renderColumnList()` и `applyFromList()` используют `allOriginalColumnKeys`. Добавлена `restoreOriginalColumns()` — восстанавливает `group.columns` из оригиналов перед каждым `applySettings()`, вызывается в точках: загрузка файла, Сохранить, Загрузить из файла.ColumnKeys` (который теряет скрытые колонки после `applySettings()`)
 - UI: кнопка «⚙️ Столбцы» с бейджами `СN` / `ПN`
 - Dropdown: список колонок (checkbox скрыть + input переименовать)
 - Footer (sticky): Сохранить, Сбросить скрытия, Сбросить переименования, Загрузить из файла
@@ -394,6 +407,7 @@ W:\agentDev\TBL\
 ---
 
 ### Nice-to-have
-7. Показать group title из type-1 (Название = action) вместо "Группа N"
+7. Показать group title из type-1 (Название = action) вместо «Группа N»
 8. Стрелочки/связи между group title и rows
+9. Фильтр по группам (checkbox или select)
 9. Фильтр по группам (checkbox или select)

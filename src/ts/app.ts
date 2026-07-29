@@ -14,9 +14,13 @@ import type { CompiledResult, ColumnSettings } from './types.js'
 let compiledResult: CompiledResult | null = null
 let currentFileName = ''   // basename used for localStorage keys
 let currentSettings: ColumnSettings = { hidden: [], renamed: {} }
-/** Original column keys + labels captured before settings are applied. */
+/** Original column keys + labels captured from compiled result *before* settings are applied. */
 let allColumnKeys: string[] = []
 let allColumnLabels: Record<string, string> = {}
+/** All unique column keys across all groups, captured before any settings modify columns. */
+let allOriginalColumnKeys: string[] = []
+/** Original column definitions per group, captured before any settings modify columns. */
+let allOriginalGroupColumns: import('./types.js').ColumnDef[][] = []
 
 // ── DOM references ─────────────────────────────────────────────────
 const fileInput      = document.getElementById('file-input')      as HTMLInputElement
@@ -83,6 +87,19 @@ function syncScrollAreas(): void {
   }
 }
 
+/** Restore original column definitions (keys + labels + descriptions) from captured values before applying settings. */
+function restoreOriginalColumns(compiled: CompiledResult): void {
+  for (const group of compiled.groups) {
+    const orig = allOriginalGroupColumns[group.groupIndex]
+    if (orig) group.columns = orig.slice()
+    if (group.type2Columns && group.type2Item) {
+      // Rebuild type2Columns from originals + keys not in originals
+      const origType2 = allOriginalGroupColumns[group.groupIndex + 1000] ?? []
+      group.type2Columns = origType2.slice()
+    }
+  }
+}
+
 /** Restore original column labels from captured values before applying settings. */
 function restoreOriginalLabels(compiled: CompiledResult): void {
   for (const group of compiled.groups) {
@@ -138,7 +155,7 @@ function renderColumnList(): void {
 
   colList.innerHTML = ''
 
-  for (const key of allColumnKeys) {
+  for (const key of allOriginalColumnKeys) {
     const originalLabel = allColumnLabels[key] ?? key
 
     const item = document.createElement('div')
@@ -179,16 +196,15 @@ function renderColumnList(): void {
 function applyFromList(): void {
   if (!colList || !compiledResult) return
 
-  const items = colList.querySelectorAll('.column-settings-item')
   const hidden: string[] = []
   const renamed: Record<string, string> = {}
 
-  for (const item of items) {
+  for (const key of allOriginalColumnKeys) {
+    const item = colList.querySelector(`input[type="checkbox"][data-key="${key}"]`)?.closest('.column-settings-item') as HTMLElement | null
+    if (!item) continue
+
     const checkbox = item.querySelector('input[type="checkbox"]') as HTMLInputElement
     const renameInput = item.querySelector('input.col-rename-input') as HTMLInputElement
-    const key = checkbox?.dataset.key
-
-    if (!key) continue
 
     if (checkbox?.checked) {
       hidden.push(key)
@@ -210,11 +226,16 @@ btnSave?.addEventListener('click', () => {
   applyFromList()
   saveSettings(currentFileName, currentSettings)
   // Re-render with new settings
+  restoreOriginalColumns(compiledResult)
   restoreOriginalLabels(compiledResult)
   render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings)
   syncScrollAreas()
   closeColumnSettings()
 })
+
+document.addEventListener('resize', () => {
+  syncScrollAreas();
+});
 
 // Reset hidden button
 btnResetHidden?.addEventListener('click', () => {
@@ -290,6 +311,7 @@ btnLoadSettings?.addEventListener('click', () => {
   currentSettings = copied
   updateBadges()
   saveSettings(currentFileName, currentSettings)
+  restoreOriginalColumns(compiledResult)
   restoreOriginalLabels(compiledResult)
   render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings)
   syncScrollAreas()
@@ -340,9 +362,10 @@ fileInput.addEventListener('change', async (ev) => {
     statusBar.textContent = `Компиляция: ${file.name}…`
     compiledResult = compile(grouped)
 
-    // Capture original column keys and labels before settings modify them
+    // Capture original column keys and labels from compiled result *before* settings modify columns
     allColumnKeys = []
     allColumnLabels = {}
+    allOriginalColumnKeys = []
     if (compiledResult) {
       for (const group of compiledResult.groups) {
         for (const col of group.columns) {
@@ -361,9 +384,29 @@ fileInput.addEventListener('change', async (ev) => {
         }
       }
     }
+    // Build the full key set *before* applySettings() removes hidden columns from group.columns
+    allOriginalColumnKeys = []
+    allOriginalGroupColumns = []
+    if (compiledResult) {
+      for (const group of compiledResult.groups) {
+        for (const col of group.columns) {
+          if (!allOriginalColumnKeys.includes(col.key)) allOriginalColumnKeys.push(col.key)
+        }
+        // Store original column definitions for this group
+        allOriginalGroupColumns[group.groupIndex] = group.columns.slice()
+        if (group.type2Columns) {
+          for (const col of group.type2Columns) {
+            if (!allOriginalColumnKeys.includes(col.key)) allOriginalColumnKeys.push(col.key)
+          }
+          // Store original type-2 column definitions (offset by 1000 to avoid collision)
+          allOriginalGroupColumns[group.groupIndex + 1000] = group.type2Columns.slice()
+        }
+      }
+    }
 
     // Load saved settings for this file and apply at renderer stage
     currentSettings = loadSettings(currentFileName)
+    restoreOriginalColumns(compiledResult)
     restoreOriginalLabels(compiledResult)
     render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings)
     syncScrollAreas()

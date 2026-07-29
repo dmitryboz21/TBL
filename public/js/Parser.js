@@ -21,6 +21,7 @@ export function cleanText(content) {
     result = result.replace(/\{(gray|yellow|orange|red|green|blue|violet)\}\(([^)]*)\)/g, '$2');
     result = result.replaceAll('{% endcut %}', '');
     result = result.replaceAll('&nbsp;', ' ');
+    result = result.replaceAll('\\*', ' ');
     return result.trim();
 }
 export function extractCutContent(line) {

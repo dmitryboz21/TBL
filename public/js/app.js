@@ -8,6 +8,8 @@ let currentFileName = '';
 let currentSettings = { hidden: [], renamed: {} };
 let allColumnKeys = [];
 let allColumnLabels = {};
+let allOriginalColumnKeys = [];
+let allOriginalGroupColumns = [];
 const fileInput = document.getElementById('file-input');
 const searchInput = document.getElementById('search-input');
 const btnJson = document.getElementById('btn-export-json');
@@ -57,6 +59,17 @@ function syncScrollAreas() {
         scrollArea.addEventListener('scroll', () => {
             shim.scrollLeft = scrollArea.scrollLeft;
         });
+    }
+}
+function restoreOriginalColumns(compiled) {
+    for (const group of compiled.groups) {
+        const orig = allOriginalGroupColumns[group.groupIndex];
+        if (orig)
+            group.columns = orig.slice();
+        if (group.type2Columns && group.type2Item) {
+            const origType2 = allOriginalGroupColumns[group.groupIndex + 1000] ?? [];
+            group.type2Columns = origType2.slice();
+        }
     }
 }
 function restoreOriginalLabels(compiled) {
@@ -111,7 +124,7 @@ function renderColumnList() {
     if (!colList)
         return;
     colList.innerHTML = '';
-    for (const key of allColumnKeys) {
+    for (const key of allOriginalColumnKeys) {
         const originalLabel = allColumnLabels[key] ?? key;
         const item = document.createElement('div');
         item.className = 'column-settings-item';
@@ -146,15 +159,14 @@ function renderColumnList() {
 function applyFromList() {
     if (!colList || !compiledResult)
         return;
-    const items = colList.querySelectorAll('.column-settings-item');
     const hidden = [];
     const renamed = {};
-    for (const item of items) {
+    for (const key of allOriginalColumnKeys) {
+        const item = colList.querySelector(`input[type="checkbox"][data-key="${key}"]`)?.closest('.column-settings-item');
+        if (!item)
+            continue;
         const checkbox = item.querySelector('input[type="checkbox"]');
         const renameInput = item.querySelector('input.col-rename-input');
-        const key = checkbox?.dataset.key;
-        if (!key)
-            continue;
         if (checkbox?.checked) {
             hidden.push(key);
         }
@@ -171,10 +183,14 @@ btnSave?.addEventListener('click', () => {
         return;
     applyFromList();
     saveSettings(currentFileName, currentSettings);
+    restoreOriginalColumns(compiledResult);
     restoreOriginalLabels(compiledResult);
     render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings);
     syncScrollAreas();
     closeColumnSettings();
+});
+document.addEventListener('resize', () => {
+    syncScrollAreas();
 });
 btnResetHidden?.addEventListener('click', () => {
     currentSettings.hidden = [];
@@ -242,6 +258,7 @@ btnLoadSettings?.addEventListener('click', () => {
     currentSettings = copied;
     updateBadges();
     saveSettings(currentFileName, currentSettings);
+    restoreOriginalColumns(compiledResult);
     restoreOriginalLabels(compiledResult);
     render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings);
     syncScrollAreas();
@@ -282,6 +299,7 @@ fileInput.addEventListener('change', async (ev) => {
         compiledResult = compile(grouped);
         allColumnKeys = [];
         allColumnLabels = {};
+        allOriginalColumnKeys = [];
         if (compiledResult) {
             for (const group of compiledResult.groups) {
                 for (const col of group.columns) {
@@ -300,7 +318,26 @@ fileInput.addEventListener('change', async (ev) => {
                 }
             }
         }
+        allOriginalColumnKeys = [];
+        allOriginalGroupColumns = [];
+        if (compiledResult) {
+            for (const group of compiledResult.groups) {
+                for (const col of group.columns) {
+                    if (!allOriginalColumnKeys.includes(col.key))
+                        allOriginalColumnKeys.push(col.key);
+                }
+                allOriginalGroupColumns[group.groupIndex] = group.columns.slice();
+                if (group.type2Columns) {
+                    for (const col of group.type2Columns) {
+                        if (!allOriginalColumnKeys.includes(col.key))
+                            allOriginalColumnKeys.push(col.key);
+                    }
+                    allOriginalGroupColumns[group.groupIndex + 1000] = group.type2Columns.slice();
+                }
+            }
+        }
         currentSettings = loadSettings(currentFileName);
+        restoreOriginalColumns(compiledResult);
         restoreOriginalLabels(compiledResult);
         render(compiledResult, tableContainer, unknownContainer, errorContainer, currentSettings);
         syncScrollAreas();

@@ -47,6 +47,8 @@ export function cleanText(content: string): string {
   result = result.replaceAll('{% endcut %}', '')
   // Remove &nbsp;
   result = result.replaceAll('&nbsp;', ' ')
+  // Remove \*
+  result = result.replaceAll('\\*', ' ');
   return result.trim()
 }
 

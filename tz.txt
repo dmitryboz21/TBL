@@ -220,6 +220,8 @@ Parser (cleanup + parse) → PostProcessor (group) → Compiler (merge + output)
 Для каждой группы:
 - **Заголовок группы:** `h2` из первой type-1 строки (или section header).
 - **Столбцы:** названия колонок (`label`) из `group.columns`.
+  - Перед рендером: `restoreOriginalColumns()` → `restoreOriginalLabels()` → `applySettings()`.
+  - `applySettings()` фильтрует скрытые колонки и применяет переименования.
 - **Type-1 rows:** данные из `type1Rows[]`.
 - **Type-2 rows:** данные из `type2Rows[]` (если есть) — отдельная компактная таблица сразу после type-1.
   - **Колонки type-2 таблицы = всё своё содержимое, без type-1 полей.**
@@ -228,6 +230,7 @@ Parser (cleanup + parse) → PostProcessor (group) → Compiler (merge + output)
 Стилизация:
 - Границы, padding, sticky header, hover-эффект на строках.
 - "О" → зелёный бейдж (`.badge-ok`), "НО" → жёлтый бейдж (`.badge-no`).
+- CSS classes: `section-row h1-h6` для заголовков, `text-row` для текстовых строк.
 
 ### 4.2. Секционные заголовки
 
@@ -254,7 +257,8 @@ src/ts/
 │   ├── ParsedResult / ParsedItem (HeaderNode / TableNode / TextNode)
 │   ├── GroupedResult / GroupedItem / TableGroup
 │   ├── CompiledResult / CompiledGroup / CompiledRow
-│   └── ColumnDef / SectionHeader / UnknownTable
+│   ├── ColumnDef / SectionHeader / UnknownTable
+│   └── ColumnSettings (hidden: string[], renamed: Record<string, string>)
 ├── Parser.ts
 │   ├── parse(mdText) — точка входа
 │   ├── extractCells(lines, start, end)
@@ -270,17 +274,44 @@ src/ts/
 │   ├── mergeType2IntoType1(group) — stack merge
 │   └── buildGroupRows(group) — type1Rows + type2Rows
 ├── Renderer.ts
-│   ├── render(compiled) — точка входа
+│   ├── render(compiled, container, unknownContainer, errorContainer, settings?) — точка входа
 │   ├── renderGroup(group) — per-group table
 │   ├── renderTable(columns, rows)
 │   ├── renderSectionHeaders(headers)
 │   ├── renderUnknownTables(tables)
 │   └── highlightO_NO(value)
+├── ColumnSettings.ts
+│   ├── getStorageKey(fileName, type) — ключ localStorage
+│   ├── loadSettings(fileName) — загрузка из localStorage
+│   ├── saveSettings(fileName, settings) — сохранение в localStorage
+│   ├── applySettings(compiled, settings) — фильтрация скрытых + переименование (in-place)
+│   ├── collectAllColumnKeys(compiled) — все уникальные ключи колонок
+│   └── copySettingsFrom(sourceFile, compiled, target, currentAllKeys?) — копирование из другого файла
 └── app.ts
     ├── init — fileInput → parse → group → compile → render
     ├── search, exportCSV, exportJSON
+    ├── column settings UI: renderColumnList(), applyFromList(), updateBadges()
+    ├── restoreOriginalColumns(), restoreOriginalLabels()
     └── helpers
 ```
+
+### 5.1. Column Settings (localStorage)
+
+Состояние настроек хранится в `localStorage` по ключам:
+- `${basename}__hidden_columns` — массив скрытых ключей колонок
+- `${basename}__renamed_columns` — объект `Record<string, string>` (key → новый лейбл)
+
+Применяется на этапе рендерера через `applySettings()`.
+
+### 5.2. Внутреннее состояние app.ts
+
+- `compiledResult: CompiledResult | null` — результат компиляции
+- `currentFileName: string` — basename файла для localStorage ключей
+- `currentSettings: ColumnSettings` — текущие настройки (скрытие + переименование)
+- `allColumnKeys: string[]` — ключи колонок (для legacy, используется в copySettingsFrom)
+- `allColumnLabels: Record<string, string>` — оригинальные лейблы колонок
+- `allOriginalColumnKeys: string[]` — все ключи до применения settings (для dropdown)
+- `allOriginalGroupColumns: ColumnDef[][]` — оригинальные определения колонок по группам (для restore)
 
 ---
 
@@ -301,6 +332,8 @@ src/ts/
 | Пер-групп колонки | Каждая группа имеет свои колонки |
 | Зависимости | TypeScript — HTML/CSS/JS, без фреймворков |
 | Загрузка файла | `<input type="file">` |
+| Настройки столбцов | localStorage по basename файла |
+| Восстановление скрытых/переименованных | `restoreOriginalColumns()` + `restoreOriginalLabels()` перед `applySettings()` |
 
 Работу ведём в файлах:
 - `src/ts/*.*` (любые файлы внутри ts)
@@ -309,12 +342,29 @@ src/ts/
 
 ---
 
-## 7. Порядок выполнения (актуализированный)
+## 7. Статус реализации (итог итерации 8)
 
-1. **HTML-скелет** — загрузка файла, контейнеры, CSS (✅ Готово).
-2. **Parser** — парсинг Markdown + cleanup (`**`, `{color}`, `{% cut %}` → H2) (⚠️ Требует изменений).
-3. **PostProcessor** — группировка type-1/type-2 через стэк (🆕 Новый модуль).
-4. **Compiler** — per-group merge O/NO, per-group columns, output type-1 + type-2 rows (⚠️ Требует изменений).
-5. **Renderer** — per-group table rendering, type-2 as separate compact block (⚠️ Требует изменений).
-6. **Поиск/экспорт** — фильтрация строк, CSV/JSON (⚠️ Требует адаптации к per-group).
-7. **Unknown tables** — вывод внизу в `<details>` (✅ Готово, но может потребовать адаптации).
+| № | Компонент | Статус | Примечания |
+|---|-----------|--------|------------|
+| 1 | `types.ts` | ✅ Готово | + `ColumnSettings` interface |
+| 2 | `Parser.ts` | ✅ Готово | cleanup: `**`, `{color}`, `{% cut %}`, `\.`→`.` |
+| 3 | `PostProcessor.ts` | ✅ Готово | stack-based grouping, 34 теста проходят |
+| 4 | `Compiler.ts` | ✅ Готово | per-group merge + outputRows |
+| 5 | `Renderer.ts` | ✅ Готово | per-group rendering, optional settings |
+| 6 | `ColumnSettings.ts` | ✅ Готово | load/save/apply/copy settings |
+| 7 | `app.ts` | ✅ Готово | pipeline + UI + bug fix (итерация 8) |
+| 8 | `public/index.html` | ✅ Готово | dropdown menu, badges, footer buttons |
+| 9 | `public/css/main.css` | ✅ Готово | full styling + dropdown styles |
+| 10 | Тесты Parser | ⚠️ 75/96 | 21 pre-existing failures |
+| 11 | Тесты PostProcessor | ✅ 34/34 | все проходят |
+| 12 | Сборка | ✅ Готово | `npm run build` чисто |
+
+## 8. Известные TODO
+
+### Must-do
+- UI-тест на примерах: загрузить `examples/log_more_short_example4.md`, проверить последнюю группу без type-2.
+
+### Nice-to-have
+- Показать group title из type-1 (Название = action) вместо «Группа N».
+- Стрелочки/связи между group title и rows.
+- Фильтр по группам (checkbox или select).

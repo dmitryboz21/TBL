@@ -389,8 +389,7 @@ body {
   color: var(--text-warning);
   border-color: var(--border-color);
   border-left-width: 3px;
-  border-left-color: var(--text-warning);
-  font-style: italic;
+  border-left-color: var(--text-warning); 
   font-size: 12px;
   font-weight: 400;
 }
