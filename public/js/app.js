@@ -3,6 +3,7 @@ import { groupTables } from './PostProcessor.js';
 import { compile } from './Compiler.js';
 import { render } from './Renderer.js';
 import { loadSettings, saveSettings, collectAllColumnKeys, copySettingsFrom, } from './ColumnSettings.js';
+import { toJsonc } from './JsonExporter.js';
 let compiledResult = null;
 let currentFileName = '';
 let currentSettings = { hidden: [], renamed: {} };
@@ -408,12 +409,31 @@ searchInput.addEventListener('input', () => {
         }
     }
 });
-btnJson.addEventListener('click', () => {
+btnJson.addEventListener('click', async () => {
     if (!compiledResult)
         return;
-    const json = toJSON(compiledResult);
-    downloadFile(json, 'tbl_export.json', 'application/json');
+    const jsonc = toJsonc(compiledResult, currentSettings);
+    downloadFile(jsonc, 'tbl_export.jsonc', 'application/json');
+    try {
+        await navigator.clipboard.writeText(jsonc);
+        showToast('Скопировано в буфер обмена');
+    }
+    catch {
+        showToast('Не удалось скопировать');
+    }
 });
+function showToast(message) {
+    let toast = document.getElementById('toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2000);
+}
 function escapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -424,15 +444,6 @@ function enableControls() {
     btnColSettings.disabled = false;
 }
 function buildSearchIndex() {
-}
-function toJSON(compiled) {
-    const output = compiled.groups.map(g => ({
-        groupIndex: g.groupIndex,
-        columns: g.columns,
-        type1Rows: g.type1Rows,
-        type2Rows: g.type2Rows,
-    }));
-    return JSON.stringify(output, null, 2);
 }
 function downloadFile(content, filename, mime) {
     const blob = new Blob([content], { type: mime });

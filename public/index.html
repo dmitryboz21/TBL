@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Парсер лог-ТЗ → Сводная таблица</title>
-  <link rel="stylesheet" href="https://dmitryboz21.github.io/TBL/public/css/main.css">
+  <link rel="stylesheet" href="http://localhost:3000/public/css/main.css">
 </head>
 <body>
   <header id="toolbar">
@@ -18,7 +18,9 @@
 
       <div class="export-group">
         <button id="btn-theme" class="btn-theme" title="Переключить тему">🌙 Тема</button>
-        <button id="btn-export-json" class="btn-export" disabled>Экспорт JSON</button>
+        <button id="btn-export-json" class="btn-export" disabled title="Экспорт в JSONC + копирование">
+          <span class="btn-icon">📋</span> Экспорт JSON
+        </button>
         <div class="column-settings-group">
           <button id="btn-column-settings" class="btn-export" disabled title="Настройки столбцов">
             ⚙️ Столбцы
@@ -52,6 +54,6 @@
     <div id="error-container"></div>
   </main>
 
-  <script type="module" src="https://dmitryboz21.github.io/TBL/public/js/app.js"></script>
+  <script type="module" src="http://localhost:3000/public/js/app.js"></script>
 </body>
 </html>

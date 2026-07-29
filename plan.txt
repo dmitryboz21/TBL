@@ -1,13 +1,13 @@
 # План реализации: Парсер лог-ТЗ → Сводная таблица (SPA) — v2
 
-> Проект: TypeScript SPA, парсящая Markdown-файл ТЗ по логированию и выдающая сводную HTML-таблицу с поиском и экспортом (JSON).
+> Проект: TypeScript SPA, парсящая Markdown-файл ТЗ по логированию и выдающая сводную HTML-таблицу с поиском и экспортом (JSONC).
 > ТЗ: `tz.md` (актуальное ТЗ v2). Примеры входных данных: `examples/log_tz_short.md`, `examples/log_tz.md`, `examples/log_more_short_example3.md`.
 > Код: `src/ts/*`, стили: `public/css/main.css`, точка входа: `public/index.html`.
 > Запуск: `npx serve public -l 3000` → `http://localhost:3000`.
 
 ---
 
-## Текущий стейт (итог 8-й итерации — Column Settings bug fix)
+## Текущий стейт (итог 9-й итерации — JSONC Export)
 
 **Исправлено (итерация 7):** `PostProcessor.ts` — переписан алгоритм группировки для корректной обработки:
 - type-1 после type-2 → создаёт новую группу (а не_merge_ в существующую)
@@ -29,6 +29,14 @@
 
 **Результат:** все 34 теста PostProcessor проходят. Баг исправлен.
 
+**Добавлено (итерация 9):** `JsonExporter.ts` — экспорт в JSONC (JSON with comments).
+- Одноколоночные строки (текст/заголовки с colspan) → `/* content */`
+- Многоколоночные строки (данные) → объект JS-стиля, ключи = лейблы колонок, значения trim, пустые пропускаем
+- Матрицы обязательности (type-2) → не экспортируются
+- Скрытые колонки → исключаются
+- Переименованные колонки → ключ = новое имя
+- Файл скачивается с расширением `.jsonc`
+
 | Компонент | Статус | Файлы | Комментарии |
 |-----------|--------|-------|-------------|
 | HTML-скелет | ✅ Готово | `public/index.html` | Кнопка «⚙️ Столбцы» + dropdown menu |
@@ -40,6 +48,7 @@
 | Рендерер | ✅ Готово | `src/ts/Renderer.ts` | Принимает optional `settings`, вызывает `applySettings()` |
 | Column Settings | ✅ Готово | `src/ts/ColumnSettings.ts` | load/save/apply/copy settings |
 | Поиск/экспорт | ✅ Готово | `src/ts/app.ts` | UI dropdown, badges, load from file, баг-фикс итерации 8 |
+| JSONC экспорт | ✅ Готово | `src/ts/JsonExporter.ts` | toJsonc(): JSONC с учетом settings, skip type-2 |
 | Сборка / запуск | ✅ Готово | `package.json`, `tsconfig.json` | `"type": "module"` |
 | Тесты Parser | ⚠️ 75/96 | `test/Parser.test.js` | 21 старый сбой (не мои изменения) |
 | Тесты PostProcessor | ✅ 34/34 | `test/PostProcessor.test.js` | Все прошли |
@@ -293,7 +302,8 @@ fileInput → parse() → groupTables() → compile() → render()
 | 3 | `PostProcessor.ts` — stack-based grouping (исправлен merge type-1 после type-2) | ✅ Готово | 34/34 |
 | 4 | `Compiler.ts` — per-group merge + outputRows | ✅ Готово | — |
 | 5 | `Renderer.ts` — per-group rendering + CSS classes | ✅ Готово | — |
-| 6 | `app.ts` — pipeline + search + export | ✅ Готово | — |
+| 6 | `app.ts` — pipeline + search + JSONC export | ✅ Готово | — |
+| 14 | `JsonExporter.ts` — экспорт в JSONC с учётом settings | ✅ Готово (итерация 9) | toJsonc(): одноколоночные → комментарии, многоколоночные → объекты, type-2_skip |
 | 7 | `test/Parser.test.js` | ⚠️ 75/96 | 21 pre-existing |
 | 8 | `test/PostProcessor.test.js` | ✅ 34/34 | — |
 | 9 | `public/css/main.css` — full styling spec | ✅ Готово | — |
@@ -324,6 +334,7 @@ W:\agentDev\TBL\
 │       ├── Compiler.js
 │       ├── Renderer.js
 │       ├── ColumnSettings.js
+│       ├── JsonExporter.js
 │       └── types.js
 ├── src/
 │   └── ts/
@@ -333,6 +344,7 @@ W:\agentDev\TBL\
 │       ├── Compiler.ts            # Per-group merge + outputRows
 │       ├── Renderer.ts            # Per-group rendering + CSS classes
 │       ├── ColumnSettings.ts      # Column visibility & rename (localStorage)
+│       ├── JsonExporter.ts        # JSONC export (comments + objects, respects settings)
 │       └── app.ts                 # Pipeline: parse→group→compile→render
 ├── test/
 │   ├── Parser.test.js             # 75/96 (21 pre-existing failures)
@@ -372,6 +384,7 @@ W:\agentDev\TBL\
 5. ~~**Parser.ts:** `\.` → `.` в cleanText~~ ✅ Итерация 5
 6. ~~**CSS:** Пер-уровневая стилизация headers~~ ✅ Итерация 5
 7. ~~**app.ts:** Исправить баг восстановления скрытых/переименованных столбцов после Save~~ ✅ Итерация 8
+8. ~~**JsonExporter.ts:** Экспорт в JSONC с учётом hidden/renamed колонок, skip type-2~~ ✅ Итерация 9
 
 ## ШАГ 11. Настройки столбцов (Column Settings)
 
